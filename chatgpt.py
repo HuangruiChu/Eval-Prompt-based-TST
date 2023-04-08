@@ -37,19 +37,19 @@ def evaluate_example(example):
     generated_output = response.choices[0].text.strip()
     return generated_output, expected_output
 
-# Evaluate the model on the dataset
-correct_count = 0
-total_count = len(data)
+# # Evaluate the model on the dataset
+# correct_count = 0
+# total_count = len(data)
 
-for example in tqdm(data):
-    generated_output, expected_output = evaluate_example(example)
+# for example in tqdm(data):
+#     generated_output, expected_output = evaluate_example(example)
 
-    # Check if the generated output matches the expected output
-    if generated_output == expected_output:
-        correct_count += 1
+#     # Check if the generated output matches the expected output
+#     if generated_output == expected_output:
+#         correct_count += 1
 
-# Calculate the accuracy
-accuracy = correct_count / total_count
-print(f"Accuracy: {accuracy:.2%}")
+# # Calculate the accuracy
+# accuracy = correct_count / total_count
+# print(f"Accuracy: {accuracy:.2%}")
 
-# TODO save results to a file
+# # TODO save results to a file
