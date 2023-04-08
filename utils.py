@@ -7,9 +7,11 @@ def gen_prompt(input_sentence,label,prompt_style="zero_shoot"):
   
   '''
   to_style = "negative"
-  if prompt_style == "zero_shoot":
-    if label == 0:
+  
+  if label == "neg":
       to_style = "positive"
+
+  if prompt_style == "zero_shoot":
     answer = '''Here is some text: \"{}\". Here is a rewrite of the text, which is more {}: \"'''.format(input_sentence,to_style)
   elif prompt_style == "few_shoot":
     answer = '''Here is some text: "I was really sad about the loss". Here is a rewrite of the text, which is more positive: "I was able to accept and work through the loss to move on." Here is some text: "The eggnog was tasteless". Here is a rewrite of the text, which is more positive: "The eggnog had a great, festive taste to it."Here is some text: \"{}\". Here is a rewrite of the text, which is more {}: \"'''.format(input_sentence,to_style)
