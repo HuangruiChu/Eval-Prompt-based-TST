@@ -1,55 +1,79 @@
-import openai
-import requests
 import os
-from tqdm import tqdm
+# import csv
+import pandas as pd
+import openai
 from dotenv import load_dotenv
+from pdb import set_trace
+
+from utils import gen_prompt
 
 # Set up OpenAI API key
 load_dotenv()
 api_key = os.environ["OPENAI_API_KEY"]
 openai.api_key = api_key
 
-# Define Hugging Face model and evaluation dataset
 model_name = "gpt-3.5-turbo" # or use the frozen one? gpt-3.5-turbo-0301
-evaluation_dataset = "your_dataset_url_here" # TODO
+MAX_TOKENS = 20
 
-# Download evaluation dataset
-response = requests.get(evaluation_dataset) # TODO
-data = response.json()
+def evaluate_prompt(prompt):
+    """
+    Evaluate a single prompt by calling to OpenAI
+    """
+    # Make API call to OpenAI
 
-# Process and prepare the dataset
-# Make sure to preprocess the data according to your model's requirements and evaluation metric
-
-def evaluate_example(example):
-    prompt = example["input"]
-    expected_output = example["output"]
-
-    # Make API call to OpenAI with the Hugging Face model and prompt
-    response = openai.Completion.create(
+    # response = openai.Completion.create(
+    #     model=model_name,
+    #     prompt=prompt,
+    #     max_tokens=MAX_TOKENS,
+    #     n=1,
+    #     stop=None,
+    # )
+    set_trace()
+    print(f"calling to openai: \"{prompt}\"")
+    completion = openai.ChatCompletion.create(
         model=model_name,
-        prompt=prompt,
-        max_tokens=len(expected_output),
-        n=1,
-        stop=None,
-        temperature=1
+        messages=[
+            {"role": "user", "content": prompt}
+        ]
     )
+    try:
+        generated_output = completion.choices[0].message.content
+        print(f"generated: {generated_output}")
+        return generated_output
+    except Exception as e:
+        print(f"Failed with prompt \"{prompt}\". Exception: {e}")
 
-    generated_output = response.choices[0].text.strip()
-    return generated_output, expected_output
+def evaluate_df(df, prompt_style="zero_shoot"):
+    """
+    Iteratively call rows of the dataframe to the OpenAI API
+    """
+    generated_outputs = []
+    for index, (label, input_sentence, expected_output) in df.iterrows(): 
+        prompt = gen_prompt(input_sentence, label, prompt_style=prompt_style)
+        generated_outputs.append(evaluate_prompt(prompt))
+    
 
-# # Evaluate the model on the dataset
-# correct_count = 0
-# total_count = len(data)
+    
 
-# for example in tqdm(data):
-#     generated_output, expected_output = evaluate_example(example)
+# def get_test_dataset(filepath):
 
-#     # Check if the generated output matches the expected output
-#     if generated_output == expected_output:
-#         correct_count += 1
+#     # with open(filepath) as f:
+#     #     raw_data = csv.reader(f)
+    
+#     return raw_data
 
-# # Calculate the accuracy
-# accuracy = correct_count / total_count
-# print(f"Accuracy: {accuracy:.2%}")
+#     # prompt_dic = {}
+#     # prompt_dic["zero_shoot"] = "prompt1"
+#     # outputfile = open('yelp_dummy_{}.csv'.format(prompt_dic[prompt_style]), 'w', newline='',encoding='UTF8')
+#     # writer = csv.writer(outputfile)
 
-# # TODO save results to a file
+if __name__ == "__main__":
+    #   test single prompt
+    prompt = gen_prompt("ever since joes has changed hands it 's just gotten worse and worse .", "neg")
+    generated_output = evaluate_prompt(prompt)
+    print(generated_output)
+
+    #   test dataset
+    # filepath = "Yelp/yelp_dummy_test.csv"
+    # df = pd.read_csv(filepath, header=None)
+    # evaluate_df(df)
