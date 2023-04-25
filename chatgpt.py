@@ -1,5 +1,5 @@
 import os
-import time
+from tqdm import tqdm
 import pandas as pd
 import openai
 from dotenv import load_dotenv
@@ -21,7 +21,7 @@ def evaluate_prompt(prompt):
     """
     # Make API call to OpenAI
 
-    print(f"calling to openai: \"{prompt}\"")
+    # print(f"calling to openai: \"{prompt}\"")
     completion = openai.ChatCompletion.create(
         model=model_name,
         messages=[
@@ -30,31 +30,41 @@ def evaluate_prompt(prompt):
     )
     try:
         generated_output = completion.choices[0].message.content
-        print(f"\tGenerated: {generated_output}")
+        # print(f"\tGenerated: {generated_output}")
         return generated_output
     except Exception as e:
         print(f"Failed with prompt \"{prompt}\". Exception: {e}")
 
-# current pace: 3 calls per minute (rate limit is 3 per minute)
-def evaluate_df(df, dataset_name, prompt_style="zero_shoot", output_dir="outputs"):
+
+def eval_df(df, dataset_name, input_col, target_style_col, prompt_style="zero_shoot", output_dir="outputs"):
+    """Call rows of dataframe to OpenAI API
+    
+    input_col: column name of input sentences
+    target_style_col: column name of target style
     """
-    Iteratively call rows of the dataframe to the OpenAI API
-    """
-    print(f"Using prompt style: {prompt_style}")
-    generated_outputs = []
+    
+    output_csv = f"{output_dir}/{dataset_name}-{prompt_style}.csv"
+    print(f"Writing to {output_csv}")
+
+
 
     success = 0
-    for index, (label, input_sentence, expected_output) in df.iterrows():
+    generated_outputs = []
+    for index, row in tqdm(df.iterrows(), total=len(df)):
+        input_sentence = row[input_col]
+        target_style = row[target_style_col]
+        
         while success <= index:
             try:
-                prompt = gen_prompt(input_sentence, label, prompt_style=prompt_style)
+                prompt = gen_prompt(input_sentence, target_style, prompt_style=prompt_style)
                 generated_outputs.append(evaluate_prompt(prompt))
-                pd.DataFrame(generated_outputs).to_csv(f"{output_dir}/{dataset_name}-{prompt_style}.csv", index=False, header=False)
+                pd.DataFrame(generated_outputs).to_csv(output_csv, index=False, header=False)
                 success += 1
             except (openai.error.RateLimitError, openai.error.APIError) as e:
                 print(e._message)
-                # time.sleep(20)
-            time.sleep(20)
+                set_trace()
+            # time.sleep(20) # no longer needed, rate limit was increased...?
+
 
 if __name__ == "__main__":
     #   test single prompt
@@ -62,7 +72,13 @@ if __name__ == "__main__":
     # generated_output = evaluate_prompt(prompt)
     # print(generated_output)
 
-    #   test dataset
-    filepath = "Yelp/yelp_dummy_test.csv"
-    df = pd.read_csv(filepath, header=None)
-    evaluate_df(df, "yelp_dummy")
+    #   test Yelp dummy
+    # df = pd.read_csv("Yelp/yelp_dummy_test.csv", header=None)
+    # evaluate_df(df, "yelp_dummy") # DEPRICATED
+
+    #   test GYAFC dummy
+    df = pd.read_csv("GYAFC/GYAFC_dummy.csv", keep_default_na=False)
+    eval_df(df, "GYAFC_dummy", "input", "target_style", prompt_style="zero_shoot")
+
+    #   test GYAFC full (1332)
+    # df = pd.read_csv("GYAFC/informal_to_formal.csv", keep_default_na=False)
