@@ -1,20 +1,18 @@
 
 
-def gen_prompt(input_sentence,label,prompt_style="zero_shoot"):
+def gen_prompt(input_sentence, to_style ,prompt_style="zero_shoot"):
   '''
   generate the prompt for the specific sentence
   
-  label should be in ["neg", "pos"]
+  # label should be in ["neg", "pos"]
   
   '''
 
   if label == "pos":
     to_style = "negative"
   elif label == "neg":
-      to_style = "positive"
-  else:
-    raise Exception(f"Label \"{label}\" is not either \"neg\" or \"pos\".")
-
+    to_style = "positive"
+  
   if prompt_style == "zero_shoot":
     answer = '''Here is some text: \"{}\". Here is a rewrite of the text, which is more {}: \"'''.format(input_sentence,to_style)
   elif prompt_style == "few_shoot":
