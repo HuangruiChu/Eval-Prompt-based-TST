@@ -8,9 +8,9 @@ def gen_prompt(input_sentence, to_style ,prompt_style="zero_shoot"):
   
   '''
 
-  if label == "pos":
+  if to_style == "pos":
     to_style = "negative"
-  elif label == "neg":
+  elif to_style == "neg":
     to_style = "positive"
   
   if prompt_style == "zero_shoot":
