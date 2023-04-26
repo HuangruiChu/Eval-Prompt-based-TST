@@ -1,4 +1,5 @@
 import os
+import argparse
 from tqdm import tqdm
 import time
 import pandas as pd
@@ -59,8 +60,8 @@ def continue_prompting_calls(df, input_col, target_style_col, prompt_style) -> b
         return False
     return True
 
-def evaluate_df(df, input_col, target_style_col, dataset_name, prompt_style="zero_shoot", output_dir="outputs"):
-    """Call rows of dataframe to OpenAI API
+def evaluate_df(df, input_col, target_style_col, output_name, prompt_style="zero_shoot", output_dir="outputs"):
+    """Call rows of dataframe to OpenAI API sequentially
     
     input_col: column name of input sentences
     target_style_col: column name of target style
@@ -70,7 +71,7 @@ def evaluate_df(df, input_col, target_style_col, dataset_name, prompt_style="zer
         print("Exiting...")
         return
 
-    output_csv = f"{output_dir}/{dataset_name}-{prompt_style}.csv"
+    output_csv = f"{output_dir}/{output_name}-{prompt_style}.csv"
     print(f"Writing output to {output_csv}")
 
     success = 0
@@ -96,16 +97,15 @@ def evaluate_df(df, input_col, target_style_col, dataset_name, prompt_style="zer
 
     return generated_outputs
 
-# def parallel_evaluate_df(df, input_col, target_style_col, dataset_name, prompt_style="zero_shoot", output_dir="outputs"):
 
-def evaluate_df_parallel(df, input_col, target_style_col, dataset_name, prompt_style="zero_shoot", output_dir="outputs"):
+def evaluate_df_parallel(df, input_col, target_style_col, output_name, prompt_style, output_dir):
     """Evaluate df in parallel"""
 
     if not continue_prompting_calls(df, input_col, target_style_col, prompt_style):
         print("Exiting...")
         return
 
-    output_csv = f"{output_dir}/{dataset_name}-{prompt_style}.csv"
+    output_csv = f"{output_dir}/{output_name}-{prompt_style}.csv"
     print(f"Writing output to {output_csv}")
 
     def evaluate_prompt_row(index_row_tuple):
@@ -124,7 +124,7 @@ def evaluate_df_parallel(df, input_col, target_style_col, dataset_name, prompt_s
                 prompt = gen_prompt(input_sentence, target_style, prompt_style=prompt_style)
                 generated_output, _ = evaluate_prompt(prompt)
                 return index, generated_output
-            except openai.error as e:
+            except (openai.error.RateLimitError, openai.error.APIError) as e:
                 print(e._message)
                 tries += 1
                 time.sleep(10)
@@ -132,16 +132,6 @@ def evaluate_df_parallel(df, input_col, target_style_col, dataset_name, prompt_s
             # except (openai.error.RateLimitError, openai.error.APIError) as e:
             #     print(e._message)
                 # set_trace()
-    
-    #   vanilla df.apply
-    # with tqdm(total=len(df)) as pbar:
-    #     results = df.apply(evaluate_prompt_row, axis=1, input_col=input_col, target_style_col=target_style_col, prompt_style=prompt_style)
-    #     pbar.update(1)
-    
-    #   pandarallel
-    # from pandarallel import pandarallel # import multiprocessing as mp
-    # pandarallel.initialize(progress_bar=True)
-    # results = df.transpose().parallel_apply(evaluate_prompt_row)
 
     #   concurrent.futures
     import concurrent.futures
@@ -169,38 +159,39 @@ def evaluate_df_parallel(df, input_col, target_style_col, dataset_name, prompt_s
     return generated_outputs
 
 if __name__ == "__main__":
-    #   test single prompt
-    # prompt = gen_prompt("ever since joes has changed hands it 's just gotten worse and worse .", "neg")
-    # generated_output = evaluate_prompt(prompt)
-    # print(generated_output)
 
-    #   test Yelp dummy
-    # df = pd.read_csv("Yelp/yelp_dummy_test.csv", header=None)
-    # evaluate_df(df, "yelp_dummy") # DEPRICATED
+    parser = argparse.ArgumentParser(description='Process test set through OpenAI API.')
+    parser.add_argument('test_set_path', type=str, help='path to csv file containing test set')
+    parser.add_argument('output_name', type=str, help='name of output')
+    parser.add_argument('--input_col', type=str, help='name of input column', default="input")
+    parser.add_argument('--target_style_col', type=str, help='name of target style column', default="target_style")
+    parser.add_argument('--prompt_style', type=str, help='prompt style', default="zero_shoot")
+    parser.add_argument('--start', type=int, help='starting index', default=0)
+    parser.add_argument('--end', type=int, help='ending index', default=None)
+    parser.add_argument('--output_dir', type=str, help='path to directory where we will create the new file', default="outputs/")
 
-    #   test GYAFC dummy in sequential
-    # df = pd.read_csv("GYAFC/GYAFC_dummy.csv", keep_default_na=False)
-    # evaluate_df(df, "input", "target_style", "GYAFC_dummy", prompt_style="zero_shoot")
-    #   in parallel
-    df = pd.read_csv("GYAFC/GYAFC_dummy.csv", keep_default_na=False)
-    df = df.iloc[15:19, :]
-    evaluate_df_parallel(df, "input", "target_style", "GYAFC_dummy", prompt_style="zero_shoot")
+    args = parser.parse_args()
 
-    #   test GYAFC full (1332)
-    # df = pd.read_csv("GYAFC/GYAFC_test.csv", keep_default_na=False)
-    # # in parallel
-    # evaluate_df_parallel(df, "input", "target_style", "GYAFC_dummy", prompt_style="zero_shoot")
+    test_set_path = args.test_set_path
+    output_name = args.output_name
+    input_col = args.input_col
+    target_style_col = args.target_style_col
+    prompt_style = args.prompt_style
+    output_dir = args.output_dir
 
-    #   test range(0, 100) of GYAFC
-    # df = pd.read_csv("GYAFC/GYAFC_test.csv", keep_default_na=False)
-    # df = df.iloc[0:100, :]
-    # print(len(df))
-    # evaluate_df(df, "input", "target_style", "GYAFC_100", prompt_style="zero_shoot")
+    df = pd.read_csv(test_set_path, keep_default_na=False)
 
-    #   test range(100, 200) of GYAFC
-    #   in parallel
-    # df = pd.read_csv("GYAFC/GYAFC_test.csv", keep_default_na=False)
-    # df = df.iloc[100:200, :]
-    # print(df)
-    # evaluate_df_parallel(df, "input", "target_style", "GYAFC_100-200", prompt_style="zero_shoot")
-    
+    start = args.start
+    end = args.end
+
+    df = df.iloc[start:end, :]
+    print(df)
+
+    evaluate_df_parallel(
+        df=df,
+        input_col=input_col,
+        target_style_col=target_style_col,
+        output_name=output_name,
+        prompt_style=prompt_style,
+        output_dir=output_dir,
+    )
