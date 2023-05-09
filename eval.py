@@ -5,6 +5,7 @@ from transformers import AutoModelForCausalLM
 import torch
 from sacrebleu.metrics import BLEU
 from tqdm import tqdm
+import argparse
 
 from pdb import set_trace
 
@@ -65,7 +66,7 @@ def classify_formality(pred_texts):
     
     return preds, labels, scores
 
-def score_sentiment(generated, target_class="NEGATIVE", output_file=None):
+def score_sentiment(generated, target_class, output_file=None):
     """Give the fraction and percentage of successful sentiment transfers
     
     Assumes all of the generated sentences are trying to be the target_class
@@ -195,6 +196,56 @@ if __name__ == "__main__":
     # score_BLEU(generated, refs)
 
     #   score GYAFC-zero-shoot ppl
-    df = pd.read_csv("outputs/GYAFC-zero_shoot.csv", header=None)
-    generated_list = list(df.apply(remove_end_quote, axis=1))
-    print(score_ppl(generated_list))
+    # df = pd.read_csv("outputs/GYAFC-zero_shoot.csv", header=None)
+    # generated_list = list(df.apply(remove_end_quote, axis=1))
+    # print(score_ppl(generated_list))
+
+    parser = argparse.ArgumentParser(description='Evaluate model output using various metrics.')
+    parser.add_argument('generated_path', type=str, help='path to csv file contaning model generations')
+    parser.add_argument('--refs_path', type=str, help='path to csv file containing human references', default=None)
+    parser.add_argument('--remove_end_quote', action='store_true', help='look for and remove any end quotes in the generations')
+    parser.add_argument('--ppl', action='store_true', help='calculate perplexity score')
+    parser.add_argument('--bleu', action='store_true', help='calculate bleu score')
+    parser.add_argument('--formality', type=str, default=None, help='calculate formality score')
+    parser.add_argument('--sentiment', type=str, default=None, help='calculate sentiment score')
+
+    args = parser.parse_args()
+
+    generated_path = args.generated_path
+    refs_path = args.refs_path
+    remove_end_quote = args.remove_end_quote
+    find_ppl = args.ppl
+    find_bleu = args.bleu
+    find_formality = args.formality
+    find_sentiment = args.sentiment
+
+    df = pd.read_csv(generated_path, header=None)
+    set_trace()
+    if remove_end_quote:
+        generated = list(df.apply(remove_end_quote, axis=1))
+    else:
+        generated = list(df[0])
+
+    if find_ppl:
+        print(f"PPL: {score_ppl(generated)}")
+    if find_bleu:
+        df_refs = pd.read_csv(refs_path)
+        refs = df_refs[['ref0', 'ref1', 'ref2', 'ref3']].transpose().values.tolist()
+
+        print(f"BLEU: {score_BLEU(generated, refs)}")
+    if find_formality:
+        print(score_formality(generated, target_class=find_formality))#, output_file="results/GYAFC_score.csv")
+    if find_sentiment:
+        print(score_sentiment(generated, target_class=find_sentiment))
+
+    # df = pd.read_csv("outputs/GYAFC-zero_shoot.csv", header=None)
+    # generated = list(df.apply(remove_end_quote, axis=1))
+
+    # df2 = pd.read_csv("GYAFC/GYAFC_test.csv")
+    # refs = df2[['ref0', 'ref1', 'ref2', 'ref3']].transpose().values.tolist()
+    # set_trace()
+
+    # score_BLEU(generated, refs)
+
+    # if find_ppl:
+
