@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer
-from sacrebleu.metrics import BLEU
+from transformers import AutoModelForCausalLM
 import torch
+from sacrebleu.metrics import BLEU
+from tqdm import tqdm
 
 from pdb import set_trace
-
 
 class SimpleDataset:
     def __init__(self, tokenized_texts):
@@ -141,6 +142,19 @@ def score_BLEU(generated_list, refs_list, output_file=None):
     #     print(f"Saving in new file {output_file}")
     #     pd.DataFrame(individual_scores).to_csv(output_file, index=False, header=None)
 
+def score_ppl(generated_list):
+    model = AutoModelForCausalLM.from_pretrained("gpt2")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    def score(sentence):
+        inputs = tokenizer(sentence, return_tensors = "pt")
+        loss = model(input_ids = inputs["input_ids"], labels = inputs["input_ids"]).loss
+        ppl = torch.exp(loss)
+        return ppl.item()
+    
+    ppl_list = [score(generated) for generated in tqdm(generated_list)]
+    return sum(ppl_list)/len(ppl_list)
+
 def remove_end_quote(x):
     if x[0][-1] == '"':
         return x[0][:-1]
@@ -171,11 +185,16 @@ if __name__ == "__main__":
     # score_formality(generated, target_class="formal", output_file="results/GYAFC_score.csv")
 
     #   score GYAFC-zero_shoot bleu
+    # df = pd.read_csv("outputs/GYAFC-zero_shoot.csv", header=None)
+    # generated = list(df.apply(remove_end_quote, axis=1))
+
+    # df2 = pd.read_csv("GYAFC/GYAFC_test.csv")
+    # refs = df2[['ref0', 'ref1', 'ref2', 'ref3']].transpose().values.tolist()
+    # set_trace()
+
+    # score_BLEU(generated, refs)
+
+    #   score GYAFC-zero-shoot ppl
     df = pd.read_csv("outputs/GYAFC-zero_shoot.csv", header=None)
-    generated = list(df.apply(remove_end_quote, axis=1))
-
-    df2 = pd.read_csv("GYAFC/GYAFC_test.csv")
-    refs = df2[['ref0', 'ref1', 'ref2', 'ref3']].transpose().values.tolist()
-    set_trace()
-
-    score_BLEU(generated, refs)
+    generated_list = list(df.apply(remove_end_quote, axis=1))
+    print(score_ppl(generated_list))
