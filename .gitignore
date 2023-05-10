@@ -3,7 +3,7 @@ __pycache__/
 venv/
 .DS_Store
 
-results/
 GYAFC/
 GYAFC*.csv
 GYAFC_Corpus
+outputs/

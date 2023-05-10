@@ -1,0 +1,11 @@
+just the middle step: what is the formality of the normalization?
+2023-05-10 01:29:09.128718
+Formality acc: 0.97 (1294/1333)2023-05-10 03:28:21.545315
+
+GPT paraphraser, GPT inverse paraphraser
+
+2023-05-10 03:28:47.500727
+python eval.py outputs/GPT-paraphrase-GPT-inverse_zero-shot.csv --formality formal --ppl --bleu --result_path results/GYAFC-GPT-paraphrase.txt --refs_path GYAFC/GYAFC_test.csv
+PPL: 87.54651342139945
+BLEU: 5.152543011206489
+Formality acc: 1.00 (1331/1332)
