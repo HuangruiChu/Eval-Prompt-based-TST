@@ -1,12 +1,25 @@
 import pandas as pd
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer
-from sacrebleu.metrics import BLEU
+from transformers import AutoModelForCausalLM
 import torch
+from sacrebleu.metrics import BLEU
+from tqdm import tqdm
+import argparse
+import datetime
 
 from pdb import set_trace
 
 
+SENTIMENT_MAP = {
+    "negative": 0,
+    "positive": 1
+}
+
+FORMALITY_MAP = {
+    "informal": 0,
+    "formal": 1
+}
 class SimpleDataset:
     def __init__(self, tokenized_texts):
         self.tokenized_texts = tokenized_texts
@@ -19,8 +32,6 @@ class SimpleDataset:
 
 def classify_sentiment(pred_texts):
     """Classify list of texts using a finetuned RoBERTa-Large (SiEBERT)
-
-    {0: "NEGATIVE", 1: "POSITIVE"}
     """
 
     model_name = "siebert/sentiment-roberta-large-english"
@@ -41,8 +52,6 @@ def classify_sentiment(pred_texts):
 
 def classify_formality(pred_texts):
     """Give the fraction and percentage of successful sentiment transfers
-
-    {0: "informal", 1: "formal"}
     """
     
     model_name = "s-nlp/roberta-base-formality-ranker"
@@ -64,28 +73,23 @@ def classify_formality(pred_texts):
     
     return preds, labels, scores
 
-def score_sentiment(generated, target_class="NEGATIVE", output_file=None):
+def score_sentiment(generated, target_class, output_file=None):
     """Give the fraction and percentage of successful sentiment transfers
     
     Assumes all of the generated sentences are trying to be the target_class
-    
-    {0: "NEGATIVE", 1: "POSITIVE"}
     """
 
-    assert target_class in ["NEGATIVE", "POSITIVE"]
+    assert target_class in SENTIMENT_MAP
 
     preds, _, _ = classify_sentiment(generated)
     
     total = len(preds)
     score = sum(preds)
-    if target_class == "NEGATIVE":
+    if SENTIMENT_MAP[target_class] == 0:
         score = total - sum(preds)
 
     if output_file:
-        if target_class == "NEGATIVE":
-            expected_scores = total * [0]
-        else:
-            expected_scores = total * [1]
+        expected_scores = total * [SENTIMENT_MAP[target_class]]
         individual_scores = [classified == expected for (classified, expected) in zip(preds, expected_scores)]
         print(f"Saving in new file {output_file}")
         pd.DataFrame(individual_scores).to_csv(output_file, index=False, header=None)
@@ -100,20 +104,17 @@ def score_formality(generated, target_class="formal", output_file=None):
     {0: "informal", 1: "formal"}
     """
 
-    assert target_class in ["informal", "formal"]
+    assert target_class in FORMALITY_MAP
 
     preds, _, _ = classify_formality(generated)
 
     total = len(preds)
     score = sum(preds)
-    if target_class == "informal":
+    if FORMALITY_MAP[target_class] == 0:
         score = total - sum(preds)
     
     if output_file:
-        if target_class == "informal":
-            expected_scores = total * [0]
-        else:
-            expected_scores = total * [1]
+        expected_scores = total * [FORMALITY_MAP[target_class]]
         individual_scores = [classified == expected for (classified, expected) in zip(preds, expected_scores)]
         print(f"Saving in new file {output_file}")
         pd.DataFrame(individual_scores).to_csv(output_file, index=False, header=None)
@@ -134,12 +135,24 @@ def score_BLEU(generated_list, refs_list, output_file=None):
     
     bleu_score = bleu.corpus_score(generated_list, refs_list)
 
-    set_trace()
     return bleu_score.score
 
     # if output_file:
     #     print(f"Saving in new file {output_file}")
     #     pd.DataFrame(individual_scores).to_csv(output_file, index=False, header=None)
+
+def score_ppl(generated_list):
+    model = AutoModelForCausalLM.from_pretrained("gpt2")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    def score(sentence):
+        inputs = tokenizer(sentence, return_tensors = "pt")
+        loss = model(input_ids = inputs["input_ids"], labels = inputs["input_ids"]).loss
+        ppl = torch.exp(loss)
+        return ppl.item()
+    
+    ppl_list = [score(generated) for generated in tqdm(generated_list)]
+    return sum(ppl_list)/len(ppl_list)
 
 def remove_end_quote(x):
     if x[0][-1] == '"':
@@ -147,35 +160,62 @@ def remove_end_quote(x):
     else:
         return x[0]
 
+def save_score(result_path, score_str):
+    print(score_str)
+    if result_path:
+        with open(result_path, 'a') as file:
+            file.write(f'{score_str}\n')
+
 if __name__ == "__main__":
-    #   try sentiment classifier on single list
-    # pred_texts = ["ever since joes has changed hands it 's just gotten worse and worse .", "I'm so happy today, I want to cry happy tears. I love everything!"]
-    # print(classify_sentiment(pred_texts))
+    parser = argparse.ArgumentParser(description='Evaluate model output using various metrics.')
+    parser.add_argument('generated_path', type=str, help='path to csv file contaning model generations')
+    parser.add_argument('--refs_path', type=str, help='path to csv file containing human references', default=None)
+    parser.add_argument('--remove_end_quote', action='store_true', help='look for and remove any end quotes in the generations')
+    parser.add_argument('--ppl', action='store_true', help='calculate perplexity score')
+    parser.add_argument('--bleu', action='store_true', help='calculate bleu score')
+    parser.add_argument('--formality', type=str, default=None, choices=FORMALITY_MAP, help='calculate formality score')
+    parser.add_argument('--sentiment', type=str, default=None, choices=SENTIMENT_MAP, help='calculate sentiment score')
+    parser.add_argument('--result_path', type=str, default=None, help='path to append the score results')
 
-    #   try sentiment classifier on dummy dataset
-    # df = pd.read_csv("outputs/yelp_dummy-zero_shoot.csv", header=None)
-    # df = df.apply(remove_end_quote, axis=1)
+    args = parser.parse_args()
 
-    # generated = list(df[0])
-    # print(score_sentiment(generated, output_file="results/yelp_dummy_score.csv"))
+    generated_path = args.generated_path
+    refs_path = args.refs_path
+    remove_end_quote = args.remove_end_quote
+    find_ppl = args.ppl
+    find_bleu = args.bleu
+    find_formality = args.formality
+    find_sentiment = args.sentiment
+    result_path = args.result_path
 
-    #   try classify formality
-    # generated = ['Therefore, what is the implication if both parties involved are engaging in a rebound relationship?', 'Wishing you the best of luck in your pursuit of the ideal candidate.', 'What is the underlying motivation driving individuals to pursue unobtainable individuals and knowingly desire that which they should not?', 'Do you have a proclivity for engaging in contentious debates and disputes?', 'If that is your definitive decision, then that would be the recommended approach.']
-    # print(classify_formality(generated))
+    df = pd.read_csv(generated_path, header=None)
+    if remove_end_quote:
+        generated = list(df.apply(remove_end_quote, axis=1))
+    else:
+        generated = list(df[0])
 
-    #   score GYAFC-zero_shoot accuracy
-    # df = pd.read_csv("outputs/GYAFC-zero_shoot.csv", header=None)
-    # print(len(df))
-    # set_trace()
-    # generated = list(df.apply(remove_end_quote, axis=1))
-    # score_formality(generated, target_class="formal", output_file="results/GYAFC_score.csv")
+    # calculate scores...
+    save_score(result_path, f"{datetime.datetime.now().time()}")
+    if find_ppl:
+        print("Calculating PPL...")
+        ppl_score = f"PPL: {score_ppl(generated)}"
+        save_score(result_path, ppl_score)
+    if find_bleu:
+        print("Calculating BLEU...")
+        if not refs_path:
+            bleu_score = "BLEU: N/A (No refs path provided)"
+        else:
+            df_refs = pd.read_csv(refs_path)
+            refs = df_refs[['ref0', 'ref1', 'ref2', 'ref3']].transpose().values.tolist()
+            bleu_score = f"BLEU: {score_BLEU(generated, refs)}"
+        save_score(result_path, bleu_score)
 
-    #   score GYAFC-zero_shoot bleu
-    df = pd.read_csv("outputs/GYAFC-zero_shoot.csv", header=None)
-    generated = list(df.apply(remove_end_quote, axis=1))
+    if find_formality:
+        print(f"Calculating formality acc for target class {find_formality}...")
+        formality_acc = f"Formality acc: {score_formality(generated, target_class=find_formality)}"
+        save_score(result_path, formality_acc)
+    if find_sentiment:
+        print(f"Calculating sentiment acc for target class {find_formality}...")
+        sentiment_acc = f"Sentiment acc: {score_sentiment(generated, target_class=find_sentiment)}"
+        save_score(result_path, formality_acc)
 
-    df2 = pd.read_csv("GYAFC/GYAFC_test.csv")
-    refs = df2[['ref0', 'ref1', 'ref2', 'ref3']].transpose().values.tolist()
-    set_trace()
-
-    score_BLEU(generated, refs)
