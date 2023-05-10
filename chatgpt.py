@@ -168,7 +168,7 @@ if __name__ == "__main__":
     parser.add_argument('--prompt_style', type=str, help='prompt style', default="zero_shoot")
     parser.add_argument('--start', type=int, help='starting index', default=0)
     parser.add_argument('--end', type=int, help='ending index', default=None)
-    parser.add_argument('--output_dir', type=str, help='path to directory where we will create the new file', default="outputs/")
+    parser.add_argument('--output_dir', type=str, help='path to directory where we will create the new file', default="outputs/yelp")
 
     args = parser.parse_args()
 
