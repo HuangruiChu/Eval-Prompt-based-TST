@@ -169,13 +169,13 @@ def save_score(result_path, score_str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate model output using various metrics.')
     parser.add_argument('generated_path', type=str, help='path to csv file contaning model generations')
+    parser.add_argument('result_path', type=str, default=None, help='path to append the score results')
     parser.add_argument('--refs_path', type=str, help='path to csv file containing human references', default=None)
     parser.add_argument('--remove_end_quote', action='store_true', help='look for and remove any end quotes in the generations')
     parser.add_argument('--ppl', action='store_true', help='calculate perplexity score')
     parser.add_argument('--bleu', action='store_true', help='calculate bleu score')
     parser.add_argument('--formality', type=str, default=None, choices=FORMALITY_MAP, help='calculate formality score')
     parser.add_argument('--sentiment', type=str, default=None, choices=SENTIMENT_MAP, help='calculate sentiment score')
-    parser.add_argument('--result_path', type=str, default=None, help='path to append the score results')
 
     args = parser.parse_args()
 
@@ -195,7 +195,7 @@ if __name__ == "__main__":
         generated = list(df[0])
 
     # calculate scores...
-    save_score(result_path, f"{datetime.datetime.now().time()}")
+    save_score(result_path, f"{datetime.datetime.now()}")
     if find_ppl:
         print("Calculating PPL...")
         ppl_score = f"PPL: {score_ppl(generated)}"
@@ -206,7 +206,10 @@ if __name__ == "__main__":
             bleu_score = "BLEU: N/A (No refs path provided)"
         else:
             df_refs = pd.read_csv(refs_path)
-            refs = df_refs[['ref0', 'ref1', 'ref2', 'ref3']].transpose().values.tolist()
+            try:
+                refs = df_refs[['ref0', 'ref1', 'ref2', 'ref3']].transpose().values.tolist()
+            except:
+                refs = df_refs[['ref0']].transpose().values.tolist()
             bleu_score = f"BLEU: {score_BLEU(generated, refs)}"
         save_score(result_path, bleu_score)
 
@@ -215,7 +218,7 @@ if __name__ == "__main__":
         formality_acc = f"Formality acc: {score_formality(generated, target_class=find_formality)}"
         save_score(result_path, formality_acc)
     if find_sentiment:
-        print(f"Calculating sentiment acc for target class {find_formality}...")
+        print(f"Calculating sentiment acc for target class {find_sentiment}...")
         sentiment_acc = f"Sentiment acc: {score_sentiment(generated, target_class=find_sentiment)}"
-        save_score(result_path, formality_acc)
+        save_score(result_path, sentiment_acc)
 
